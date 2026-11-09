@@ -853,7 +853,8 @@ function checkTrainingTable(file){
 
     let html = `<div class="kv"><span>${t("rows")}</span><span>${rows.length.toLocaleString()}</span></div>`;
     if (years.length) html += `<div class="kv"><span>${t("years")}</span><span>${ymin}–${ymax}</span></div>`;
-    html += `<div class="kv"><span>${t("matched")}</span><span>${Object.keys(cols).length}/${need.length}</span></div>`;
+    const hit = need.filter(k => k in cols).length;
+    html += `<div class="kv"><span>${t("matched")}</span><span>${hit}/${need.length}</span></div>`;
 
     if (hasLabel){
       const counts = {};
