@@ -124,6 +124,7 @@ legend{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(
 
 /* ---------- misc ---------- */
 .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.col{display:flex;flex-direction:column;gap:16px}
 @media(max-width:900px){.split{grid-template-columns:1fr}}
 .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;
   border-bottom:1px dashed #f0ece5}
@@ -217,7 +218,7 @@ a{color:var(--accent)}
         <div class="split">
           <div class="card">
             <h2 id="decompTitle" data-i18n="deck">Ordinal layer</h2>
-            <p class="sub" id="decompSub" data-i18n="dsub">β·z per input; positive pushes toward Q1.</p>
+            <p class="sub" id="decompSub" data-i18n="dsub">β·z for this paper. The coefficients are fixed; only z moves with the inputs.</p>
             <div class="bars" id="decomp"></div>
           </div>
           <div class="card">
@@ -287,20 +288,31 @@ a{color:var(--accent)}
   <!-- ================= METHOD ================= -->
   <section class="tab" id="tab-method">
     <div class="split">
-      <div class="card">
-        <h2>GB-OLR</h2>
-        <p class="sub" id="m1">A gradient-boosting classifier produces a four-tier posterior from thirteen features. An ordinal logistic regression then re-calibrates it, together with the same thirteen features, under an explicit ordering constraint.</p>
-        <div style="margin-top:16px" class="note">
-          <p><b>Layer 1.</b> CatBoost, 500 trees, depth 6, learning rate 0.04. Postponing the tier decision gives the second layer a compact summary of the feature interactions.</p>
-          <p style="margin-top:10px"><b>Out of fold.</b> Posteriors that enter layer 2 are always produced by a model that never saw the row being scored, so the second layer cannot learn in-sample optimism.</p>
-          <p style="margin-top:10px"><b>Layer 2.</b> Sixteen standardised inputs: thirteen features plus P(Q1), P(Q3), P(Q4). One shared slope vector and three ordered cut-points; nineteen parameters in total, every one attached to a named input.</p>
+      <div class="col">
+        <div class="card">
+          <h2>GB-OLR</h2>
+          <p class="sub" id="m1">A gradient-boosting classifier produces a four-tier posterior from thirteen features. An ordinal logistic regression then re-calibrates it, together with the same thirteen features, under an explicit ordering constraint.</p>
+          <div style="margin-top:16px" class="note">
+            <p><b>Layer 1.</b> CatBoost, 500 trees, depth 6, learning rate 0.04. Postponing the tier decision gives the second layer a compact summary of the feature interactions.</p>
+            <p style="margin-top:10px"><b>Out of fold.</b> Posteriors that enter layer 2 are always produced by a model that never saw the row being scored, so the second layer cannot learn in-sample optimism.</p>
+            <p style="margin-top:10px"><b>Layer 2.</b> Sixteen standardised inputs: thirteen features plus P(Q1), P(Q3), P(Q4). One shared slope vector of sixteen coefficients and three ordered cut-points. The cut-points are refitted in every training window.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h2 id="mhBeta">Ordinal coefficients</h2>
+          <p class="sub">Fixed for this model. The scoring tab draws β·z, so the bars move from paper to paper while these slopes do not.</p>
+          <table id="betaTable" style="margin-top:8px">
+            <thead><tr><th>Input</th><th style="text-align:right">β</th><th style="text-align:right">SD</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="note" style="margin-top:8px">Mean and SD over the five fold models. Positive slopes move a paper toward Q1. Q2 is the reference class for the three posteriors.</p>
         </div>
       </div>
       <div class="card">
         <h2 id="mh2">Reading the numbers</h2>
         <div class="note" style="margin-top:12px">
           <p><b>β &gt; 0</b> pushes a paper toward Q1. The model uses the Pr(y ≥ j) parametrisation, the inverse of the usual Pr(y ≤ j) convention.</p>
-          <p style="margin-top:10px"><b>β·z</b> is the local contribution of one paper. The sixteen terms sum to its ordinal index, so they are additive within a paper.</p>
+          <p style="margin-top:10px"><b>β·z</b> is the local contribution of one paper. The sixteen terms sum to its ordinal index, so they are additive within a paper, and only z depends on the paper.</p>
           <p style="margin-top:10px"><b>Expected position</b> interpolates the four probabilities at tier mid-points (12.5 / 37.5 / 62.5 / 87.5). It is an interpolation, not a calibrated quantile.</p>
           <p style="margin-top:10px"><b>Fold agreement</b> counts how many fold models reach the same tier. Low values mean the paper sits on a boundary.</p>
           <p style="margin-top:10px"><b>Caveat.</b> The three posteriors are near-collinear with each other and with the raw features, so coefficient magnitudes are compressed and only signs and between-fold stability should be read.</p>
@@ -327,7 +339,7 @@ const TEXT = {
   scoreBtn:"Score paper", exampleBtn:"Load example", resetBtn:"Reset",
   batchTitle:"Batch", batchSub:"Drop a CSV with one paper per row.",
   batchDrop:"drop .csv / .tsv",
-  deck:"Ordinal layer", dsub:"β·z per input; positive pushes toward Q1.",
+  deck:"Ordinal layer", dsub:"β·z for this paper. The coefficients are fixed; only z moves with the inputs.",
   gtitle:"First layer", gsub:"Mean |SHAP| on held-out windows.",
   verdictLead:"Predicted ten-year citation tier", pctTitle:"Expected position",
   flagAgree:"fold agreement", flagOor:"out-of-range features",
@@ -658,6 +670,19 @@ function renderHeader(){
   document.title = `GB-OLR · ${m.field}`;
 }
 
+function renderBeta(){
+  const n = M.beta.names.length, k = M.models.length;
+  const mean = new Array(n).fill(0), sd = new Array(n).fill(0);
+  for (const m of M.models) for (let j = 0; j < n; j++) mean[j] += -m.coef[j] / k;
+  for (const m of M.models) for (let j = 0; j < n; j++)
+    sd[j] += Math.pow(-m.coef[j] - mean[j], 2) / k;
+  const rows = M.beta.names.map((nm, j) => ({nm, b: mean[j], s: Math.sqrt(sd[j])}))
+    .sort((a, b) => Math.abs(b.b) - Math.abs(a.b));
+  $("betaTable").querySelector("tbody").innerHTML = rows.map(r =>
+    `<tr><td>${r.nm}</td><td style="text-align:right">${r.b >= 0 ? "+" : ""}${r.b.toFixed(3)}</td>`
+    + `<td style="text-align:right;color:var(--muted)">${r.s.toFixed(3)}</td></tr>`).join("");
+}
+
 function renderStats(){
   const m = M.meta.metrics;
   const rows = [["W-Kappa", m.W_Kappa], ["Sev-Err", m.Sev_Err], ["MAE", m.MAE],
@@ -911,7 +936,7 @@ function activateTab(name){
 function boot(model){
   M = model;
   if (!M){ $("meta").textContent = "model.js not found — run export_web.py"; return; }
-  renderHeader(); renderStats(); renderGlobalShap(); selfTest();
+  renderHeader(); renderStats(); renderBeta(); renderGlobalShap(); selfTest();
   applyText(); score();
 }
 
