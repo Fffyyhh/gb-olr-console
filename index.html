@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GB-OLR · citation quartile console</title>
+<style>
+:root{
+  --bg:#f7f5f1; --card:#ffffff; --ink:#191a1d; --muted:#6f6a63; --line:#e6e1d8;
+  --accent:#9c2b1b; --accent-soft:#f7eae6; --pos:#a83423; --neg:#1f5b7d;
+  --q1:#1f6b4a; --q2:#5f7d55; --q3:#b3862f; --q4:#a8452f;
+  --radius:14px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,
+         "PingFang SC","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;
+     line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.015em}
+p{margin:0}
+button{font-family:inherit;font-size:inherit;cursor:pointer}
+input{font-family:inherit;font-size:inherit}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;
+  padding:12px 24px;background:rgba(247,245,241,.88);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line)}
+.brand{font-weight:650;letter-spacing:-.02em;font-size:16px;display:flex;align-items:center;gap:8px}
+.brand .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block}
+.meta{color:var(--muted);font-size:12.5px;flex:1;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);
+  color:var(--muted);background:#fff;white-space:nowrap}
+.badge.ok{border-color:#cfe3d7;background:#eef6f1;color:#26694a}
+.badge.bad{border-color:#eed3cc;background:#fbeeea;color:#9c2b1b}
+.ghost{border:1px solid var(--line);background:#fff;color:var(--ink);
+  padding:5px 12px;border-radius:999px;font-size:12.5px}
+.ghost:hover{border-color:#d3cbc0}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex;gap:6px;padding:18px 24px 0;max-width:1240px;margin:0 auto}
+.tabs button{border:0;background:transparent;color:var(--muted);padding:8px 14px;
+  border-radius:999px;font-size:13.5px}
+.tabs button.active{background:#fff;color:var(--ink);border:1px solid var(--line)}
+main{max-width:1240px;margin:0 auto;padding:18px 24px 64px}
+.tab{display:none}
+.tab.active{display:block}
+
+/* ---------- layout ---------- */
+.grid{display:grid;grid-template-columns:390px minmax(0,1fr);gap:20px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px}
+.card + .card{margin-top:16px}
+.card h2{font-size:15px}
+.card .sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+
+/* ---------- form ---------- */
+fieldset{border:0;margin:0;padding:0}
+legend{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+  padding:14px 0 8px;font-weight:600}
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:6px 0;border-bottom:1px dashed #f0ece5}
+.field:last-child{border-bottom:0}
+.field label{font-size:13px;color:#3a3733;display:flex;flex-direction:column;gap:1px}
+.field .hint{font-size:11px;color:var(--muted)}
+.field input[type=number]{width:96px;text-align:right;padding:6px 9px;border:1px solid var(--line);
+  border-radius:8px;background:#fdfcfa;font-variant-numeric:tabular-nums;color:var(--ink)}
+.field input[type=number]:focus{outline:2px solid #f0d9d2;border-color:#d9b7ac}
+.switch{position:relative;width:42px;height:24px;border-radius:999px;background:#e8e3da;
+  border:1px solid var(--line);transition:background .15s}
+.switch[aria-checked=true]{background:var(--accent);border-color:var(--accent)}
+.switch i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.18)}
+.switch[aria-checked=true] i{transform:translateX(18px)}
+.derived{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.chip{font-size:11.5px;color:var(--muted);background:#f4f1ea;border-radius:7px;
+  padding:4px 8px;font-variant-numeric:tabular-nums}
+.chip b{color:#3a3733;font-weight:600}
+.actions{display:flex;gap:8px;margin-top:16px}
+.btn{border:0;border-radius:10px;padding:10px 16px;font-weight:600;font-size:13.5px;
+  background:var(--accent);color:#fff}
+.btn:hover{background:#872316}
+.btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.secondary:hover{border-color:#d3cbc0}
+
+/* ---------- result ---------- */
+.verdict{display:flex;align-items:center;gap:18px}
+.tier{width:78px;height:78px;border-radius:18px;display:grid;place-items:center;
+  color:#fff;font-size:30px;font-weight:650;letter-spacing:-.02em}
+.tier small{display:block;font-size:9.5px;letter-spacing:.12em;opacity:.85;font-weight:600}
+.verdict .lead{font-size:13px;color:var(--muted)}
+.verdict .big{font-size:26px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.probs{margin-top:18px;display:flex;flex-direction:column;gap:8px}
+.prow{display:grid;grid-template-columns:34px 1fr 52px;align-items:center;gap:10px;font-size:12.5px}
+.track{height:9px;background:#f1ede5;border-radius:999px;overflow:hidden}
+.fill{height:100%;border-radius:999px;transition:width .35s cubic-bezier(.2,.7,.2,1)}
+.prow .val{text-align:right;font-variant-numeric:tabular-nums;color:#3a3733}
+
+/* percentile strip */
+.pct{margin-top:22px}
+.pct-head{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:12.5px;color:var(--muted);margin-bottom:8px}
+.pct-head b{color:var(--ink);font-size:14px}
+.strip{position:relative;height:34px;border-radius:9px;overflow:hidden;display:flex;
+  border:1px solid var(--line)}
+.strip div{flex:1;display:grid;place-items:center;font-size:10px;letter-spacing:.08em;
+  color:#fff;font-weight:600;opacity:.92}
+.needle{position:absolute;top:0;bottom:0;width:2.5px;background:#191a1d;
+  box-shadow:0 0 0 1.5px #fff;transition:left .35s cubic-bezier(.2,.7,.2,1)}
+.ticks{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:5px}
+
+/* bar lists */
+.bars{margin-top:10px;display:flex;flex-direction:column;gap:5px}
+.bar{display:grid;grid-template-columns:128px 1fr 54px;align-items:center;gap:10px;font-size:12px}
+.bar .name{color:#3a3733;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .b{height:7px;background:#f4f1ea;border-radius:999px;position:relative;overflow:hidden}
+.bar .b i{position:absolute;top:0;bottom:0;border-radius:999px}
+.bar .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.bar.zero .b::before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;
+  background:#e0dad0}
+
+/* ---------- misc ---------- */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+.kv{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;
+  border-bottom:1px dashed #f0ece5}
+.kv:last-child{border-bottom:0}
+.kv span:first-child{color:var(--muted)}
+.kv span:last-child{font-variant-numeric:tabular-nums}
+.note{font-size:12.5px;color:var(--muted)}
+.drop{border:1.5px dashed #ddd5c8;border-radius:12px;padding:18px;text-align:center;
+  color:var(--muted);font-size:13px;background:#fcfaf6;transition:.15s}
+.drop.hot{border-color:var(--accent);background:var(--accent-soft)}
+pre{background:#1d1e22;color:#e8e4dc;padding:14px 16px;border-radius:10px;overflow:auto;
+  font-family:var(--mono);font-size:12.5px;line-height:1.6;margin:10px 0 0;
+  white-space:pre-wrap;word-break:break-word}
+code{font-family:var(--mono);font-size:12.5px;background:#f2efe8;padding:1px 5px;
+  border-radius:5px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #f0ece5}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:16px}
+.step{display:grid;grid-template-columns:26px 1fr;gap:12px}
+.step::before{counter-increment:s;content:counter(s);width:26px;height:26px;border-radius:50%;
+  background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;
+  font-size:12px;font-weight:650}
+.warn{color:#9c2b1b;font-size:12px}
+.ok{color:#26694a;font-size:12px}
+footer{max-width:1240px;margin:0 auto;padding:0 24px 48px;color:var(--muted);font-size:11.5px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="dot"></span>GB-OLR</div>
+  <div class="meta" id="meta">loading model…</div>
+  <span class="badge" id="verify">…</span>
+</header>
+
+<nav class="tabs">
+  <button data-tab="score" class="active" id="tabBtnScore" data-i18n="tabScore">Score a paper</button>
+  <button data-tab="train" id="tabBtnTrain" data-i18n="tabTrain">Train on your data</button>
+  <button data-tab="method" id="tabBtnMethod" data-i18n="tabMethod">Method</button>
+</nav>
+
+<main>
+  <!-- ================= SCORE ================= -->
+  <section class="tab active" id="tab-score">
+    <div class="grid">
+      <div>
+        <form class="card" id="form" autocomplete="off">
+          <h2 id="formTitle" data-i18n="formTitle">Paper profile</h2>
+          <p class="sub" id="formSub" data-i18n="formSub">Thirteen inputs; three derived values are shown below.</p>
+          <div id="fields"></div>
+          <div class="derived" id="derived"></div>
+          <div class="actions">
+            <button class="btn" type="submit" id="scoreBtn" data-i18n="scoreBtn">Score paper</button>
+            <button class="btn secondary" type="button" id="exampleBtn" data-i18n="exampleBtn">Load example</button>
+            <button class="btn secondary" type="button" id="resetBtn" data-i18n="resetBtn">Reset</button>
+          </div>
+        </form>
+        <div class="card">
+          <h2 id="batchTitle" data-i18n="batchTitle">Batch</h2>
+          <p class="sub" id="batchSub" data-i18n="batchSub">Drop a CSV with one paper per row.</p>
+          <div class="drop" id="batchDrop" style="margin-top:12px" data-i18n="batchDrop">drop .csv / .tsv</div>
+          <input type="file" id="batchFile" accept=".csv,.tsv,.txt" hidden>
+          <div id="batchOut"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" id="resultCard">
+          <div class="verdict">
+            <div class="tier" id="tierBox" style="background:var(--q2)">–<small id="tierLabel">TIER</small></div>
+            <div>
+              <div class="lead" id="verdictLead" data-i18n="verdictLead">Predicted ten-year citation tier</div>
+              <div class="big" id="verdictBig">—</div>
+              <div class="lead" id="verdictSub"></div>
+            </div>
+          </div>
+          <div class="probs" id="probs"></div>
+          <div class="pct">
+            <div class="pct-head"><span id="pctTitle" data-i18n="pctTitle">Expected position</span><b id="pctValue">—</b></div>
+            <div class="strip" id="strip"></div>
+          </div>
+          <div class="derived" id="flags" style="margin-top:16px"></div>
+        </div>
+
+        <div class="split">
+          <div class="card">
+            <h2 id="decompTitle" data-i18n="deck">Ordinal layer</h2>
+            <p class="sub" id="decompSub" data-i18n="dsub">β·z per input; positive pushes toward Q1.</p>
+            <div class="bars" id="decomp"></div>
+          </div>
+          <div class="card">
+            <h2 id="globalTitle" data-i18n="gtitle">First layer</h2>
+            <p class="sub" id="globalSub" data-i18n="gsub">Mean |SHAP| on held-out windows.</p>
+            <div class="bars" id="globalShap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TRAIN ================= -->
+  <section class="tab" id="tab-train">
+    <div class="split">
+      <div class="card">
+        <h2 id="trainTitle" data-i18n="trainTitle">Train on your own field</h2>
+        <p class="sub" id="trainSub" data-i18n="trainSub">Training runs on your machine; this page checks the table and writes the command.</p>
+        <div class="steps" style="margin-top:18px">
+          <div class="step">
+            <div>
+              <div id="s1Title"><b data-i18n="s1">Drop your labelled table.</b></div>
+              <div class="drop" id="trainDrop" style="margin-top:8px" data-i18n="s1drop">drop .csv with the 13 inputs + Label</div>
+              <input type="file" id="trainFile" accept=".csv,.tsv,.txt" hidden>
+              <div id="trainCheck" style="margin-top:10px"></div>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <div id="s2Title"><b data-i18n="s2">Run the command it prints.</b></div>
+              <pre id="trainCmd">python scripts/gbolr.py train --data your_table.csv --out models/your_field</pre>
+              <button class="btn secondary" id="copyCmd" style="margin-top:8px" data-i18n="copy">Copy</button>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <div id="s3Title"><b data-i18n="s3">Point this page at the new model.</b></div>
+              <pre id="exportCmd">python scripts/export_web.py --model models/your_field --out web</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2 id="reproTitle" data-i18n="reproTitle">This model</h2>
+        <p class="sub" id="reproSub" data-i18n="reproSub">Five-fold expanding-window protocol, test windows only.</p>
+        <div id="modelStats" style="margin-top:12px"></div>
+        <h2 style="margin-top:22px" id="reqTitle" data-i18n="reqTitle">What the table needs</h2>
+        <table id="reqTable" style="margin-top:8px">
+          <thead><tr><th data-i18n="thColumn">Column</th><th data-i18n="thMeaning">Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>C1 C2 C3</code></td><td data-i18n="r1">citations in years 1–3</td></tr>
+            <tr><td><code>PL TL NoA NoR NOI</code></td><td data-i18n="r2">pages, title length, authors, references, keywords</td></tr>
+            <tr><td><code>Funding OA</code></td><td data-i18n="r3">0/1 flags</td></tr>
+            <tr><td><code>JIF_Year H_Year</code></td><td data-i18n="r4">journal impact factor and h-index in the publication year</td></tr>
+            <tr><td><code>Year</code></td><td data-i18n="r5">publication year</td></tr>
+            <tr><td><code>Label</code> or <code>TNoC10</code></td><td data-i18n="r6">Q1–Q4, or the ten-year citation count</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note" style="margin-top:4px" data-i18n="run"></p>
+    <p class="note" style="margin-top:10px" data-i18n="host">This folder is a static site: upload it to GitHub Pages, Zenodo or OSF and cite the resulting link. No server, no database, no data leaves the browser.</p>
+  </section>
+
+  <!-- ================= METHOD ================= -->
+  <section class="tab" id="tab-method">
+    <div class="split">
+      <div class="card">
+        <h2>GB-OLR</h2>
+        <p class="sub" id="m1">A gradient-boosting classifier produces a four-tier posterior from thirteen features. An ordinal logistic regression then re-calibrates it, together with the same thirteen features, under an explicit ordering constraint.</p>
+        <div style="margin-top:16px" class="note">
+          <p><b>Layer 1.</b> CatBoost, 500 trees, depth 6, learning rate 0.04. Postponing the tier decision gives the second layer a compact summary of the feature interactions.</p>
+          <p style="margin-top:10px"><b>Out of fold.</b> Posteriors that enter layer 2 are always produced by a model that never saw the row being scored, so the second layer cannot learn in-sample optimism.</p>
+          <p style="margin-top:10px"><b>Layer 2.</b> Sixteen standardised inputs: thirteen features plus P(Q1), P(Q3), P(Q4). One shared slope vector and three ordered cut-points; nineteen parameters in total, every one attached to a named input.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h2 id="mh2">Reading the numbers</h2>
+        <div class="note" style="margin-top:12px">
+          <p><b>β &gt; 0</b> pushes a paper toward Q1. The model uses the Pr(y ≥ j) parametrisation, the inverse of the usual Pr(y ≤ j) convention.</p>
+          <p style="margin-top:10px"><b>β·z</b> is the local contribution of one paper. The sixteen terms sum to its ordinal index, so they are additive within a paper.</p>
+          <p style="margin-top:10px"><b>Expected position</b> interpolates the four probabilities at tier mid-points (12.5 / 37.5 / 62.5 / 87.5). It is an interpolation, not a calibrated quantile.</p>
+          <p style="margin-top:10px"><b>Fold agreement</b> counts how many fold models reach the same tier. Low values mean the paper sits on a boundary.</p>
+          <p style="margin-top:10px"><b>Caveat.</b> The three posteriors are near-collinear with each other and with the raw features, so coefficient magnitudes are compressed and only signs and between-fold stability should be read.</p>
+        </div>
+        <h2 style="margin-top:22px" id="mh3">Validation</h2>
+        <div class="note" style="margin-top:10px">
+          <p>Expanding window, five folds: train up to 2000 / 2003 / 2006 / 2009 / 2012, test the following three years. A paper published in 2013 is never scored by a model trained beyond 2012.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer id="foot" data-i18n="foot">Runs entirely in the browser. No data leaves this page.</footer>
+
+<script src="model.js"></script>
+<script>
+/* ============================================================
+   i18n
+   ============================================================ */
+const TEXT = {
+  tabScore:"Score a paper", tabTrain:"Train on your data", tabMethod:"Method",
+  formTitle:"Paper profile", formSub:"Thirteen inputs; three derived values are shown below.",
+  scoreBtn:"Score paper", exampleBtn:"Load example", resetBtn:"Reset",
+  batchTitle:"Batch", batchSub:"Drop a CSV with one paper per row.",
+  batchDrop:"drop .csv / .tsv",
+  deck:"Ordinal layer", dsub:"β·z per input; positive pushes toward Q1.",
+  gtitle:"First layer", gsub:"Mean |SHAP| on held-out windows.",
+  verdictLead:"Predicted ten-year citation tier", pctTitle:"Expected position",
+  flagAgree:"fold agreement", flagOor:"out-of-range features",
+  tableDownload:"Download CSV",
+  trainTitle:"Train on your own field",
+  trainSub:"Training runs on your machine; this page checks the table and writes the command.",
+  s1:"Drop your labelled table.", s1drop:"drop .csv with the 13 inputs + Label",
+  s2:"Run the command it prints.", s3:"Point this page at the new model.",
+  copy:"Copy", copied:"copied",
+  reproTitle:"This model", reproSub:"Five-fold expanding-window protocol, test windows only.",
+  reqTitle:"What the table needs", thColumn:"Column", thMeaning:"Meaning",
+  foot:"Runs entirely in the browser. No data leaves this page.",
+  labelStep:"no Label and no TNoC10 - run the label step first",
+  missing:"missing", allFound:"all thirteen inputs found",
+  rows:"rows", years:"years", matched:"matched columns", tiers:"tiers",
+  showing:"showing", folds:"folds", scored:"scored papers",
+  run:"A full run (5 folds x 5 seeds) takes about five minutes on a laptop CPU; --quick gives a 20-second smoke test.",
+  host:"This folder is a static site: upload it to GitHub Pages, Netlify, Zenodo or OSF and cite the resulting link. No server, no database, no data leaves the browser.",
+  r1:"citations in years 1-3", r2:"pages, title length, authors, references, keywords",
+  r3:"0/1 flags", r4:"journal impact factor and h-index in the publication year",
+  r5:"publication year", r6:"Q1-Q4, or the ten-year citation count"
+};
+const t = k => TEXT[k] || k;
+
+/* ============================================================
+   field schema
+   ============================================================ */
+const FIELDS = [
+  {g:"Early citations", k:"C1", label:"C1", hint:"citations in the publication year", step:1, min:0},
+  {g:"Early citations", k:"C2", label:"C2", hint:"year + 1", step:1, min:0},
+  {g:"Early citations", k:"C3", label:"C3", hint:"year + 2", step:1, min:0},
+  {g:"Paper", k:"PL", label:"PL", hint:"pages", step:1, min:0},
+  {g:"Paper", k:"TL", label:"TL", hint:"title length", step:1, min:0},
+  {g:"Paper", k:"NoA", label:"NoA", hint:"authors", step:1, min:0},
+  {g:"Paper", k:"NoR", label:"NoR", hint:"references", step:1, min:0},
+  {g:"Paper", k:"NOI", label:"NOI", hint:"keywords", step:1, min:0},
+  {g:"Venue & access", k:"JIF_Year", label:"JIF", hint:"impact factor, publication year", step:0.01, min:0},
+  {g:"Venue & access", k:"H_Year", label:"H index", hint:"journal h-index, publication year", step:1, min:0},
+  {g:"Venue & access", k:"Funding", label:"Funded", hint:"funding acknowledgement", type:"bool"},
+  {g:"Venue & access", k:"OA", label:"Open access", hint:"gold, green or hybrid", type:"bool"},
+  {g:"Time", k:"Year", label:"Year", hint:"publication year", step:1, min:1900, max:2030},
+];
+const DEFAULTS = {C1:2, C2:3, C3:4, PL:12, TL:96, NoA:4, NoR:45, NOI:6,
+                  JIF_Year:2.4, H_Year:30, Funding:1, OA:0, Year:2012};
+
+/* ============================================================
+   model
+   ============================================================ */
+let M = null;
+
+function loadModel(){
+  if (window.GBOLR_MODEL) return Promise.resolve(window.GBOLR_MODEL);
+  return fetch("model.json").then(r => r.json());
+}
+
+/* CatBoost symmetric trees: one split per depth, leaf index built as a bit mask */
+function predictOne(x){
+  const probs = [];
+  for (const m of M.models){
+    let logit = m.bias.slice();
+    for (const tree of m.trees){
+      let idx = 0;
+      const s = tree.s, b = tree.b;
+      for (let d = 0; d < s.length; d++){
+        const fi = s[d];
+        if (x[fi] > m.borders[fi][b[d]]) idx |= (1 << d);
+      }
+      const off = idx * 4;
+      logit[0] += tree.v[off]; logit[1] += tree.v[off+1];
+      logit[2] += tree.v[off+2]; logit[3] += tree.v[off+3];
+    }
+    const mx = Math.max(...logit);
+    let z = logit.map(v => Math.exp(m.scale * v - m.scale * mx));
+    const sum = z.reduce((a,b)=>a+b,0);
+    const pcat = z.map(v => v/sum);
+
+    const Z = x.concat([pcat[0], pcat[2], pcat[3]]);
+    let dot = 0;
+    for (let j = 0; j < 16; j++){
+      const zs = (Z[j] - m.mu[j]) / m.sd[j];
+      dot += zs * m.coef[j];
+    }
+    const cum = m.theta.map(th => 1/(1+Math.exp(-(th - dot))));
+    const p = [cum[0], cum[1]-cum[0], cum[2]-cum[1], 1-cum[2]];
+    probs.push(p.map(v => Math.max(v,0)));
+  }
+  const out = [0,0,0,0];
+  for (const p of probs){ for (let k=0;k<4;k++) out[k]+=p[k]/probs.length; }
+  const s = out.reduce((a,b)=>a+b,0);
+  return out.map(v => v/s);
+}
+
+function tierOf(p){
+  const thr = M.thresholds;
+  const s = [1 - p[0], 1 - (p[0]+p[1]), 1 - (p[0]+p[1]+p[2])];
+  return (s[0]>=thr[0]?1:0) + (s[1]>=thr[1]?1:0) + (s[2]>=thr[2]?1:0);
+}
+
+function contributions(x, p){
+  const acc = new Array(16).fill(0);
+  for (const m of M.models){
+    // layer-1 posterior of this fold model, recomputed for a single row
+    let logit = m.bias.slice();
+    for (const tree of m.trees){
+      let idx = 0;
+      for (let d = 0; d < tree.s.length; d++){
+        const fi = tree.s[d];
+        if (x[fi] > m.borders[fi][tree.b[d]]) idx |= (1 << d);
+      }
+      const off = idx*4;
+      for (let k=0;k<4;k++) logit[k] += tree.v[off+k];
+    }
+    const mx = Math.max(...logit);
+    let z = logit.map(v => Math.exp(m.scale*(v-mx)));
+    const sum = z.reduce((a,b)=>a+b,0);
+    const pcat = z.map(v => v/sum);
+    const Z = x.concat([pcat[0], pcat[2], pcat[3]]);
+    let dot = 0;
+    for (let j=0;j<16;j++){
+      const zs = (Z[j]-m.mu[j])/m.sd[j];
+      acc[j] += -zs * m.coef[j];
+      dot += zs * m.coef[j];
+    }
+  }
+  return acc.map(v => v / M.models.length);
+}
+
+/* ============================================================
+   rendering helpers
+   ============================================================ */
+const TIER_COLORS = ["var(--q1)","var(--q2)","var(--q3)","var(--q4)"];
+const $ = id => document.getElementById(id);
+
+function setTier(tier, p){
+  const box = $("tierBox");
+  box.style.background = TIER_COLORS[tier];
+  box.innerHTML = M.tier_names[tier] + '<small id="tierLabel">TIER</small>';
+  $("verdictBig").textContent = "P = " + p[tier].toFixed(3);
+}
+
+function renderProbs(p){
+  const host = $("probs"); host.innerHTML = "";
+  const best = p.indexOf(Math.max(...p));
+  p.forEach((v,i) => {
+    const row = document.createElement("div");
+    row.className = "prow";
+    row.innerHTML = `<span style="color:${TIER_COLORS[i]};font-weight:600">${M.tier_names[i]}</span>
+      <span class="track"><span class="fill" style="width:${(v*100).toFixed(1)}%;
+        background:${TIER_COLORS[i]};opacity:${i===best?1:.55}"></span></span>
+      <span class="val">${(v*100).toFixed(1)}%</span>`;
+    host.appendChild(row);
+  });
+}
+
+function renderStrip(p){
+  const exp = p.reduce((a,v,i)=>a+v*M.midpoints[i],0);
+  const strip = $("strip"); strip.innerHTML = "";
+  ["Q1","Q2","Q3","Q4"].forEach((n,i) => {
+    const d = document.createElement("div");
+    d.style.background = TIER_COLORS[i];
+    d.textContent = n;
+    strip.appendChild(d);
+  });
+  const needle = document.createElement("div");
+  needle.className = "needle";
+  needle.style.left = Math.min(99, Math.max(0, exp)) + "%";
+  strip.appendChild(needle);
+  $("pctValue").textContent = "top " + exp.toFixed(0) + "%";
+  return exp;
+}
+
+function renderBars(host, items, fmt){
+  host.innerHTML = "";
+  const max = Math.max(...items.map(d => Math.abs(d.value))) || 1;
+  items.forEach(d => {
+    const row = document.createElement("div");
+    row.className = "bar" + (d.signed ? " zero" : "");
+    const w = Math.abs(d.value)/max*100;
+    const color = d.signed ? (d.value >= 0 ? "var(--pos)" : "var(--neg)") : "var(--pos)";
+    const left = d.signed ? (d.value >= 0 ? 50 : 50 - w/2) : 0;
+    const width = d.signed ? w/2 : w;
+    row.innerHTML = `<span class="name" title="${d.name}">${d.name}</span>
+      <span class="b"><i style="left:${left}%;width:${width}%;background:${color}"></i></span>
+      <span class="v">${d.value >= 0 ? "+" : ""}${d.value.toFixed(fmt)}</span>`;
+    host.appendChild(row);
+  });
+}
+
+function renderFlags(agree, oor){
+  $("flags").innerHTML =
+    `<span class="chip">${t("flagAgree")} <b>${(agree*100).toFixed(0)}%</b></span>
+     <span class="chip">${t("flagOor")} <b>${oor}</b></span>`;
+}
+
+/* ============================================================
+   form
+   ============================================================ */
+let STATE = {...DEFAULTS};
+
+function buildForm(){
+  const host = $("fields"); host.innerHTML = "";
+  let lastGroup = null;
+  FIELDS.forEach(f => {
+    const hint = f.hint;
+    const gname = f.g;
+    if (gname !== lastGroup){
+      const lg = document.createElement("legend"); lg.textContent = gname; host.appendChild(lg);
+      lastGroup = gname;
+    }
+    const row = document.createElement("div");
+    row.className = "field";
+    if (f.type === "bool"){
+      row.innerHTML = `<label>${f.label}<span class="hint">${hint}</span></label>
+        <button type="button" class="switch" id="sw-${f.k}" role="switch"
+          aria-checked="${STATE[f.k] ? "true":"false"}"><i></i></button>`;
+      host.appendChild(row);
+      row.querySelector(".switch").onclick = e => {
+        const on = e.currentTarget.getAttribute("aria-checked") !== "true";
+        e.currentTarget.setAttribute("aria-checked", on);
+        STATE[f.k] = on ? 1 : 0; updateDerived();
+      };
+    } else {
+      row.innerHTML = `<label for="in-${f.k}">${f.label}<span class="hint">${hint}</span></label>
+        <input type="number" id="in-${f.k}" step="${f.step}" ${f.min!==undefined?`min="${f.min}"`:""}
+          ${f.max!==undefined?`max="${f.max}"`:""} value="${STATE[f.k]}">`;
+      host.appendChild(row);
+      row.querySelector("input").oninput = e => {
+        const v = parseFloat(e.target.value);
+        STATE[f.k] = isNaN(v) ? 0 : v; updateDerived();
+      };
+    }
+  });
+  updateDerived();
+}
+
+function vectorFromState(){
+  const y0 = M.meta.year_bounds[0], y1 = M.meta.year_bounds[1];
+  const clamp = (v,a,b) => Math.min(b, Math.max(a,v));
+  const yn = (clamp(STATE.Year, y0, y1) - y0) / (y1 - y0);
+  return {
+    v: [STATE.C1, STATE.C2, STATE.C3, STATE.PL, STATE.TL, STATE.NoA, STATE.NoR, STATE.NOI,
+        STATE.Funding ? 1:0, STATE.OA ? 1:0,
+        Math.log1p(Math.max(0, STATE.JIF_Year)), Math.log1p(Math.max(0, STATE.H_Year)), yn],
+    yn
+  };
+}
+
+function updateDerived(){
+  const {yn} = vectorFromState();
+  $("derived").innerHTML =
+    `<span class="chip">log JIF <b>${Math.log1p(Math.max(0,STATE.JIF_Year)).toFixed(3)}</b></span>
+     <span class="chip">log H <b>${Math.log1p(Math.max(0,STATE.H_Year)).toFixed(3)}</b></span>
+     <span class="chip">Year_norm <b>${yn.toFixed(3)}</b></span>`;
+}
+
+/* ============================================================
+   scoring
+   ============================================================ */
+function score(){
+  const {v, yn} = vectorFromState();
+  const p = predictOne(v);
+  const tier = tierOf(p);
+  setTier(tier, p);
+  renderProbs(p);
+  const exp = renderStrip(p);
+  $("verdictSub").textContent = `${M.meta.field} · ${M.meta.n_models} fold models`;
+  $("verdictLead").textContent = t("verdictLead");
+
+  const c = contributions(v, p);
+  const names = M.beta.names;
+  const items = names.map((n,i) => ({name:n, value:c[i], signed:true}))
+    .sort((a,b) => Math.abs(b.value) - Math.abs(a.value))
+    .slice(0, 10);
+  renderBars($("decomp"), items, 3);
+
+  // fold agreement: how many single-model verdicts match the ensemble
+  renderFlags(foldAgreement(v, tier), outOfRange(v));
+}
+
+function foldAgreement(v, tier){
+  let hit = 0;
+  for (const m of M.models){
+    let logit = m.bias.slice();
+    for (const tree of m.trees){
+      let idx = 0;
+      for (let d = 0; d < tree.s.length; d++){
+        const fi = tree.s[d];
+        if (v[fi] > m.borders[fi][tree.b[d]]) idx |= (1 << d);
+      }
+      const off = idx*4;
+      for (let k=0;k<4;k++) logit[k] += tree.v[off+k];
+    }
+    const mx = Math.max(...logit);
+    let z = logit.map(val => Math.exp(m.scale*(val-mx)));
+    const sum = z.reduce((a,b)=>a+b,0);
+    const pcat = z.map(val => val/sum);
+    const Z = v.concat([pcat[0], pcat[2], pcat[3]]);
+    let dot = 0;
+    for (let j=0;j<16;j++) dot += ((Z[j]-m.mu[j])/m.sd[j]) * m.coef[j];
+    const cum = m.theta.map(th => 1/(1+Math.exp(-(th-dot))));
+    const p = [cum[0], cum[1]-cum[0], cum[2]-cum[1], 1-cum[2]];
+    const s = [1-p[0], 1-(p[0]+p[1]), 1-(p[0]+p[1]+p[2])];
+    const tt = (s[0]>=M.thresholds[0]?1:0)+(s[1]>=M.thresholds[1]?1:0)+(s[2]>=M.thresholds[2]?1:0);
+    if (tt === tier) hit++;
+  }
+  return hit / M.models.length;
+}
+
+function outOfRange(v){
+  const q = M.quantiles, n = v.length;
+  let c = 0;
+  for (let j=0;j<n;j++){
+    if (v[j] < q.q01[j] - 1e-9 || v[j] > q.q99[j] + 1e-9) c++;
+  }
+  return c;
+}
+
+/* ============================================================
+   header, stats, self-test
+   ============================================================ */
+function renderHeader(){
+  const m = M.meta;
+  $("meta").textContent = `${m.field} · ${m.n_papers.toLocaleString()} papers · `
+    + `${m.folds.length} folds · W-κ ${m.metrics.W_Kappa.toFixed(4)}`;
+  document.title = `GB-OLR · ${m.field}`;
+}
+
+function renderStats(){
+  const m = M.meta.metrics;
+  const rows = [["W-Kappa", m.W_Kappa], ["Sev-Err", m.Sev_Err], ["MAE", m.MAE],
+                ["W-F1", m.W_F1], ["Exact", m.Exact]];
+  $("modelStats").innerHTML = rows.map(([k,v]) =>
+    `<div class="kv"><span>${k}</span><span>${v.toFixed(4)}</span></div>`).join("")
+    + `<div class="kv"><span>${t("folds")}</span><span>${M.meta.folds.map(f=>f[1]+"–"+f[2]).join(", ")}</span></div>`
+    + `<div class="kv"><span>${t("scored")}</span><span>${M.meta.n_scored.toLocaleString()}</span></div>`;
+}
+
+function selfTest(){
+  const st = M.selftest;
+  if (!st) return;
+  let worst = 0;
+  st.X.forEach((x, i) => {
+    const p = predictOne(x);
+    st.p[i].forEach((v, k) => { worst = Math.max(worst, Math.abs(v - p[k])); });
+  });
+  const el = $("verify");
+  if (worst < 2e-3){
+    el.className = "badge ok";
+    el.textContent = "verified · " + worst.toExponential(1);
+  } else {
+    el.className = "badge bad";
+    el.textContent = "check failed · " + worst.toExponential(1);
+  }
+}
+
+function renderGlobalShap(){
+  const items = M.shap.features.map((n,i) => ({name:n, value:M.shap.mean_abs[i], signed:false}))
+    .sort((a,b) => b.value - a.value).slice(0, 10);
+  renderBars($("globalShap"), items, 2);
+}
+
+/* ============================================================
+   CSV
+   ============================================================ */
+const ALIAS = {
+  C1:["c1","cite1","citations1","ncit1","tc1"], C2:["c2","cite2","citations2","ncit2"],
+  C3:["c3","cite3","citations3","ncit3"], PL:["pl","pagelength","pages","numpages"],
+  TL:["tl","titlelength","titlelen"], NoA:["noa","numauthors","nauthors","authorcount"],
+  NoR:["nor","numreferences","nreferences","refcount"], NOI:["noi","numkeywords","nkeywords"],
+  Funding:["funding","funded","isfunded"], OA:["oa","openaccess","isoa"],
+  JIF_Year:["jif_year","jif","impactfactor","journalimpactfactor"],
+  H_Year:["h_year","hyear","h","hindex","h_index"], Year:["year","pubyear","publicationyear"],
+  Label:["label","tier","quartile"], TNoC10:["tnoc10","citations10y","c10total"],
+  PaperID:["paperid","id","doi","title"]
+};
+const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g,"");
+
+function parseCSV(text){
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i=0;i<text.length;i++){
+    const c = text[i];
+    if (q){
+      if (c === '"'){ if (text[i+1] === '"'){ cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === "," || c === "\t"){ row.push(cell); cell = ""; }
+    else if (c === "\n"){ row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (c !== "\r") cell += c;
+  }
+  if (cell !== "" || row.length){ row.push(cell); rows.push(row); }
+  const header = rows.shift().map(h => h.trim());
+  return {header, rows: rows.filter(r => r.some(v => v.trim() !== ""))};
+}
+
+function mapColumns(header){
+  const lookup = {}; header.forEach(h => lookup[norm(h)] = h);
+  const out = {};
+  for (const [canon, alts] of Object.entries(ALIAS)){
+    for (const a of [canon, ...alts]){
+      if (lookup[norm(a)]){ out[canon] = lookup[norm(a)]; break; }
+    }
+  }
+  return out;
+}
+
+function toNum(v){
+  if (v === undefined || v === null) return NaN;
+  const s = String(v).replace(/,/g,"").trim();
+  if (s === "") return NaN;
+  const n = Number(s); return isNaN(n) ? NaN : n;
+}
+
+function frameFromCSV(parsed){
+  const cols = mapColumns(parsed.header);
+  const idx = {};
+  for (const [k,v] of Object.entries(cols)) idx[k] = parsed.header.indexOf(v);
+  const rows = parsed.rows.map(r => {
+    const o = {};
+    for (const [k,i] of Object.entries(idx)) o[k] = r[i];
+    return o;
+  });
+  return {cols, rows};
+}
+
+function scoreFrame(frame){
+  const {cols, rows} = frame;
+  const need = ["C1","C2","C3","PL","TL","NoA","NoR","NOI","Funding","OA","JIF_Year","H_Year","Year"];
+  const miss = need.filter(k => !(k in cols));
+  const y0 = M.meta.year_bounds[0], y1 = M.meta.year_bounds[1];
+  const med = M.models[0].med;
+
+  const out = rows.map((r, i) => {
+    const g = k => { const v = toNum(r[k]); return isNaN(v) ? med[k] : v; };
+    const yr = g("Year");
+    const yn = (Math.min(y1, Math.max(y0, yr)) - y0) / (y1 - y0);
+    const v = [g("C1"),g("C2"),g("C3"),g("PL"),g("TL"),g("NoA"),g("NoR"),g("NOI"),
+               g("Funding")>0?1:0, g("OA")>0?1:0,
+               Math.log1p(Math.max(0,g("JIF_Year"))), Math.log1p(Math.max(0,g("H_Year"))), yn];
+    const p = predictOne(v);
+    const tier = tierOf(p);
+    const exp = p.reduce((a,x,k) => a + x*M.midpoints[k], 0);
+    return {
+      id: r.PaperID || ("row" + (i+1)),
+      tier: M.tier_names[tier], p, exp
+    };
+  });
+  return {miss, out};
+}
+
+function downloadCSV(rows){
+  const head = ["paper_id","pred_tier","p_Q1","p_Q2","p_Q3","p_Q4","expected_top_percentile"];
+  const body = rows.map(r => [r.id, r.tier, ...r.p.map(v=>v.toFixed(5)), r.exp.toFixed(2)]
+    .map(v => /[",\n]/.test(String(v)) ? '"'+String(v).replace(/"/g,'""')+'"' : v).join(","));
+  const blob = new Blob([head.join(",") + "\n" + body.join("\n")], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "gbolr_predictions.csv";
+  a.click();
+}
+
+/* ============================================================
+   train tab: readiness check
+   ============================================================ */
+function checkTrainingTable(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    const parsed = parseCSV(reader.result);
+    const {cols, rows} = frameFromCSV(parsed);
+    const need = ["C1","C2","C3","PL","TL","NoA","NoR","NOI","Funding","OA","JIF_Year","H_Year","Year"];
+    const miss = need.filter(k => !(k in cols));
+    const hasLabel = "Label" in cols, hasCite = "TNoC10" in cols;
+    const years = rows.map(r => toNum(r.Year)).filter(v => !isNaN(v));
+    const ymin = years.length ? Math.min(...years) : NaN;
+    const ymax = years.length ? Math.max(...years) : NaN;
+
+    let html = `<div class="kv"><span>${t("rows")}</span><span>${rows.length.toLocaleString()}</span></div>`;
+    if (years.length) html += `<div class="kv"><span>${t("years")}</span><span>${ymin}–${ymax}</span></div>`;
+    html += `<div class="kv"><span>${t("matched")}</span><span>${Object.keys(cols).length}/${need.length}</span></div>`;
+
+    if (hasLabel){
+      const counts = {};
+      rows.forEach(r => { const v = String(r.Label || "").trim().toUpperCase();
+        if (/^Q[1-4]$/.test(v)) counts[v] = (counts[v]||0)+1; });
+      const keys = ["Q1","Q2","Q3","Q4"].filter(k => counts[k]);
+      if (keys.length){
+        html += `<div class="kv"><span>${t("tiers")}</span><span>${keys.map(k=>k+" "+(100*counts[k]/rows.length).toFixed(0)+"%").join(" · ")}</span></div>`;
+      }
+    }
+
+    if (miss.length){
+      html += `<p class="warn" style="margin-top:10px">${t("missing")}: ${miss.join(", ")}</p>`;
+    } else {
+      html += `<p class="ok" style="margin-top:10px">${t("allFound")}</p>`;
+    }
+    if (!hasLabel && !hasCite){
+      html += `<p class="warn" style="margin-top:6px">${t("labelStep")}</p>`;
+    }
+
+    const name = file.name;
+    const base = name.replace(/\.[^.]+$/, "");
+    const cmd = hasLabel
+      ? `python scripts/gbolr.py train --data "${name}" --out models/${base} --seeds 1-5`
+      : `python scripts/gbolr.py label --data "${name}" --out ${base}_labeled.csv\n`
+        + `python scripts/gbolr.py train --data ${base}_labeled.csv --out models/${base} --seeds 1-5`;
+    $("trainCmd").textContent = cmd;
+    $("trainCheck").innerHTML = html;
+  };
+  reader.readAsText(file);
+}
+
+/* ============================================================
+   boot
+   ============================================================ */
+function applyText(){
+  document.documentElement.lang = "en";
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  if (M){ buildForm(); renderStats(); }
+}
+
+function activateTab(name){
+  if (!["score","train","method"].includes(name)) name = "score";
+  document.querySelectorAll(".tabs button").forEach(x =>
+    x.classList.toggle("active", x.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach(x =>
+    x.classList.toggle("active", x.id === "tab-" + name));
+}
+
+function boot(model){
+  M = model;
+  if (!M){ $("meta").textContent = "model.js not found — run export_web.py"; return; }
+  renderHeader(); renderStats(); renderGlobalShap(); selfTest();
+  applyText(); score();
+}
+
+/* events */
+document.querySelectorAll(".tabs button").forEach(b => {
+  b.onclick = () => {
+    activateTab(b.dataset.tab);
+    history.replaceState(null, "", "#" + b.dataset.tab);
+  };
+});
+$("form").onsubmit = e => { e.preventDefault(); score(); };
+$("exampleBtn").onclick = () => { STATE = {...DEFAULTS}; buildForm(); score(); };
+$("resetBtn").onclick = () => {
+  const q = M ? M.quantiles.q50 : {};
+  STATE = {};
+  FIELDS.forEach(f => STATE[f.k] = f.type === "bool" ? 0
+    : (q[f.k] !== undefined ? Math.round(q[f.k]*100)/100 : DEFAULTS[f.k]));
+  buildForm(); score();
+};
+
+function wireDrop(dropId, inputId, handler){
+  const drop = $(dropId), input = $(inputId);
+  drop.onclick = () => input.click();
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("hot"); };
+  drop.ondragleave = () => drop.classList.remove("hot");
+  drop.ondrop = e => {
+    e.preventDefault(); drop.classList.remove("hot");
+    if (e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]);
+  };
+  input.onchange = e => { if (e.target.files[0]) handler(e.target.files[0]); };
+}
+
+wireDrop("batchDrop", "batchFile", file => {
+  const r = new FileReader();
+  r.onload = () => {
+    const frame = frameFromCSV(parseCSV(r.result));
+    const {miss, out} = scoreFrame(frame);
+    let html = `<p class="sub" style="margin-top:12px">${out.length} rows`
+      + (miss.length ? ` · missing ${miss.join(", ")} (filled with median)` : "") + `</p>`;
+    html += `<table style="margin-top:6px"><thead><tr><th>paper</th><th>tier</th>
+      <th class="num">Q1</th><th class="num">Q2</th><th class="num">Q3</th><th class="num">Q4</th>
+      <th class="num">top %</th></tr></thead><tbody>`;
+    out.slice(0,8).forEach(r => {
+      html += `<tr><td style="max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.id}</td>
+        <td>${r.tier}</td>${r.p.map(v=>`<td class="num">${v.toFixed(3)}</td>`).join("")}
+        <td class="num">${r.exp.toFixed(0)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    if (out.length > 8) html += `<p class="sub" style="margin-top:8px">${t("showing")} 8 / ${out.length}</p>`;
+    html += `<button class="btn secondary" style="margin-top:10px" id="dl">${t("tableDownload")}</button>`;
+    $("batchOut").innerHTML = html;
+    $("dl").onclick = () => downloadCSV(out);
+  };
+  r.readAsText(file);
+});
+
+wireDrop("trainDrop", "trainFile", checkTrainingTable);
+
+$("copyCmd").onclick = () => {
+  navigator.clipboard.writeText($("trainCmd").textContent);
+  $("copyCmd").textContent = t("copied");
+  setTimeout(() => $("copyCmd").textContent = t("copy"), 1200);
+};
+
+loadModel().then(boot).catch(err => {
+  $("meta").textContent = "model unavailable: " + err.message;
+  $("verify").className = "badge bad";
+  $("verify").textContent = "no model";
+});
+
+if (location.hash) activateTab(location.hash.slice(1));
+</script>
+</body>
+</html>
